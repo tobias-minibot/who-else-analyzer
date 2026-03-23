@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Who Else? — Semantic Kernel Map</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: #0a0a0f;
+    color: #e0e0e0;
+    overflow-x: hidden;
+  }
+  header {
+    text-align: center;
+    padding: 40px 20px 20px;
+  }
+  header h1 {
+    font-size: 2.8rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  header p {
+    color: #888;
+    font-size: 1.05rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .stats-bar {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    padding: 20px;
+    margin: 10px auto 0;
+    max-width: 700px;
+  }
+  .stat { text-align: center; }
+  .stat .num {
+    font-size: 2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .stat .label { font-size: 0.8rem; color: #666; text-transform: uppercase; letter-spacing: 1px; }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    padding: 15px 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(10,10,15,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .search-box {
+    flex: 0 1 320px;
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.05);
+    color: #fff;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-box:focus { border-color: #667eea; }
+  .search-box::placeholder { color: #555; }
+
+  .view-toggle {
+    display: flex;
+    gap: 4px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 10px;
+    padding: 4px;
+  }
+  .view-btn {
+    padding: 8px 16px;
+    border: none;
+    background: transparent;
+    color: #888;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+  }
+  .view-btn.active { background: #667eea; color: #fff; }
+  .view-btn:hover:not(.active) { color: #ccc; }
+
+  .match-count {
+    font-size: 0.85rem;
+    color: #555;
+    min-width: 100px;
+    text-align: right;
+  }
+
+  .category-filters {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 20px 15px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .cat-btn {
+    padding: 5px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+    color: #888;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all 0.25s;
+    white-space: nowrap;
+  }
+  .cat-btn:hover { border-color: rgba(255,255,255,0.2); color: #ccc; }
+  .cat-btn.active { border-color: transparent; color: #fff; }
+  .cat-btn .count { opacity: 0.5; margin-left: 4px; }
+
+  .grid-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 10px 20px 60px;
+  }
+
+  /* Cloud view */
+  .cloud-view {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    padding: 20px;
+    min-height: 400px;
+  }
+  .cloud-tag {
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    cursor: default;
+    transition: all 0.25s;
+    opacity: 0.85;
+    position: relative;
+  }
+  .cloud-tag:hover {
+    opacity: 1;
+    transform: scale(1.08);
+    z-index: 10;
+  }
+  .cloud-tag .tooltip {
+    display: none;
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1a2e;
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    color: #ccc;
+    pointer-events: none;
+    margin-bottom: 6px;
+  }
+  .cloud-tag:hover .tooltip { display: block; }
+
+  /* Treemap view */
+  .treemap-view {
+    display: none;
+    gap: 8px;
+    padding: 10px;
+  }
+  .treemap-view.active { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+  .treemap-category {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+    padding: 16px;
+    transition: border-color 0.3s;
+  }
+  .treemap-category:hover { border-color: rgba(255,255,255,0.12); }
+  .treemap-category h3 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .treemap-category h3 .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .treemap-category h3 .cat-count {
+    font-weight: 400;
+    color: #555;
+    font-size: 0.75rem;
+  }
+  .treemap-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .treemap-item {
+    padding: 3px 10px;
+    border-radius: 5px;
+    font-size: 0.75rem;
+    background: rgba(255,255,255,0.04);
+    color: #aaa;
+    transition: all 0.2s;
+    cursor: default;
+  }
+  .treemap-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .treemap-item.highlight { color: #fff; font-weight: 600; }
+
+  /* List view */
+  .list-view {
+    display: none;
+    column-count: 4;
+    column-gap: 20px;
+    padding: 10px;
+  }
+  .list-view.active { display: block; }
+  .list-item {
+    padding: 4px 0;
+    font-size: 0.82rem;
+    color: #888;
+    break-inside: avoid;
+    transition: color 0.2s;
+    cursor: default;
+  }
+  .list-item:hover { color: #fff; }
+  .list-item.highlight { color: #667eea; font-weight: 600; }
+  .list-cat-header {
+    font-weight: 700;
+    color: #ccc;
+    padding: 12px 0 4px;
+    font-size: 0.9rem;
+    break-inside: avoid;
+    break-after: avoid;
+  }
+
+  .dim { opacity: 0.12 !important; }
+  .search-hit {
+    opacity: 1 !important;
+  }
+
+  @media (max-width: 900px) {
+    header h1 { font-size: 1.8rem; }
+    .list-view.active { column-count: 2; }
+    .stats-bar { gap: 20px; }
+    .stat .num { font-size: 1.5rem; }
+    .treemap-view.active { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Who Else?</h1>
+  <p>The semantic kernel of things people ask about — mapped across 20 domains</p>
+  <div class="stats-bar">
+    <div class="stat"><div class="num" id="totalCount">0</div><div class="label">Entries</div></div>
+    <div class="stat"><div class="num" id="catCount">0</div><div class="label">Domains</div></div>
+    <div class="stat"><div class="num" id="visibleCount">0</div><div class="label">Showing</div></div>
+  </div>
+</header>
+
+<div class="controls">
+  <input class="search-box" type="text" placeholder="Search entries…" id="searchInput">
+  <div class="view-toggle">
+    <button class="view-btn active" data-view="cloud">Cloud</button>
+    <button class="view-btn" data-view="treemap">Treemap</button>
+    <button class="view-btn" data-view="list">List</button>
+  </div>
+  <div class="match-count" id="matchCount"></div>
+</div>
+
+<div class="category-filters" id="categoryFilters"></div>
+
+<div class="grid-container">
+  <div class="cloud-view" id="cloudView" style="display:flex"></div>
+  <div class="treemap-view" id="treemapView"></div>
+  <div class="list-view" id="listView"></div>
+</div>
+
+<script>
+const DATA = {
+  "Health & Medical": {
+    color: "#e74c3c",
+    items: ["Acupuncture","Allergist","Audiologist","Ayurveda","Birth doula","Blood donation","Bone marrow donation","Cardiology","Chiropractor","Covid test","CPR training","Dentist","Dermatologist","Diabetic care","Dietitian","Doctor","Doula","Emergency dentist","Emergency room","EMT","Eye doctor","First aid","Hearing aid","Herbalist","Hospice","Hospital","Hypnotherapy","Midwife","Naturopath","Neurologist","Nurse","Nutritionist","Occupational therapy","Ophthalmologist","Optician","Optometrist","Orthodontist","Orthopedist","Osteopath","Palliative care","Paramedic","Pharmacy","Physical therapy","Physiotherapy","Podiatrist","Prosthetics","Psychiatrist","Psychologist","Sleep clinic","Speech therapy","Sports medicine","Surgeon","Urologist","Veterinarian","Vet","Emergency vet","Burn care","Clinical trial","Cosmetic dentistry","Dental hygiene","Denture","Bone density","Epidural","Eye surgery","Fertility clinic","Flu shot","Foot care","Genetic testing","Health screening","Hearing test","Heart surgery","Immunization","Intensive care","IV therapy","Joint replacement","Ketamine therapy","Kidney dialysis","Mammogram","Medical alert","Medical cannabis","Medical imaging","Medical records","Medical tourism","Medication delivery","Memory care","Mobile dentist","Mobile vet","Mouth guard","Neonatal care","Nuclear medicine","Oncology","Orthotics","Outpatient","Plastic surgery","Poison control","Post-natal care","Prenatal care","Prescription delivery","Prosthetic limb","Pulmonologist","Radiation therapy","Rapid testing","Epi pen","Incontinence care","Inpatient care","Blood bank"]
+  },
+  "Mental Health & Wellness": {
+    color: "#9b59b6",
+    items: ["Addiction counselling","Art therapy","Counselling","Crisis hotline","Detox","Family therapy","Grief counselling","Group therapy","Healing","Massage","Meditation","Meditation group","Mental health","Mindfulness","Music therapy","Reflexology","Reiki","Sound healing","Therapy","Wellness","Breath work","Cold plunge","Couple counselling","Crisis intervention","Cryotherapy","Depression support","Digital detox","Float tank","Forest bathing","Guided meditation","Narrative therapy","Pain management","Peer counselling","Peer support","Play therapy","Post-trauma support","Recovery group","Relationship coaching","Resilience training","Substance abuse","Support group","Bereavement","Child counselling","Conflict coaching","Dream interpretation","Emotional support animal","Equine therapy","Grief group","Mourning group","Cupping","Body work","Abortion counselling","Age counselling","Euthanasia counselling","Gender counselling","Menopause support"]
+  },
+  "Sports & Fitness": {
+    color: "#e67e22",
+    items: ["Acrobatics","Aikido","Archery","Badminton","Baseball","Basketball","Beach volleyball","Billiards","Boot camp","Bowling","Boxing","Bungee jumping","Climbing","Cricket","Crossfit","Cycle","Dance","Disc golf","Diving","Equestrian","Exercise class","Fencing sport","Fitness","Go-kart","Golf","Gym","Gymnastics","Handball","Hiking","Hockey","Horse riding","Ice hockey","Ice skating","Indoor climbing","Judo","Karate","Kayak","Kickboxing","Kite surfing","Lacrosse","Martial arts","Mini golf","Mountain biking","Mountaineering","Orienteering","Paddleboard","Paintball","Paragliding","Parkour","Personal trainer","Pilates","Polo","Racquetball","Rafting","Rock climbing","Roller derby","Roller skating","Rowing","Rugby","Running group","Sailing","Scuba diving","Self-defence","Skateboard","Ski","Skydiving","Slacklining","Snorkelling","Snowboard","Spinning class","Sport","Sports club","Squash","Surf","Swimming lessons","Swimming pool","Table tennis","Tai chi","Tennis","Trampoline","Triathlon","Volleyball","Water polo","Watersport","Wrestling","Yoga","Zumba","Aerial yoga","Caving","Cross-country skiing","Disability sport","Flag football","Fly fishing","Gliding","Hang gliding","Inline skating","Jet ski","Junior sports","Lane swimming","Lap pool","Lawn bowling","Line dancing","Marathon","Motor sport","Mud run","Nordic walking","Obstacle course","Open water swimming","Outdoor fitness","Outdoor pool","Paddle tennis","Parachuting","Pickleball","Pole vault","Relay race","Rounders","Laser tag","Luge","Hula hoop","Hunting","Fishing","Darts","Juggling","Unicycle","Tree climbing"]
+  },
+  "Arts & Crafts": {
+    color: "#1abc9c",
+    items: ["Art class","Art gallery","Art supplies","Batik","Beading","Book binding","Calligraphy","Candle making","Ceramics","Crochet","Embroidery","Glass blowing","Hat making","Illustration","Jewellery making","Knitting","Leather craft","Letterpress","Lithography","Macram\u00e9","Model making","Mosaic","Mural","Needlework","Origami","Paper making","Pottery","Quilting","Screen printing","Sculpture","Sewing","Silk screen","Silversmith","Stained glass","Textile art","Watercolour","Weaving","Woodcarving","Woodworking","Carving","Drawing class","Painting class","Darkroom","Framing","Dried flowers","Engraver","Botanical illustration","Chalk art","Fibre arts","Lace making","Marbling","Mask making","Miniature painting","Oil painting","Pattern making","Portrait painting","Pyrography","Ring making","Rug weaving","Soap making","T-shirt printing","Dyeing","Iron work","Metal work","Blacksmith","Custom jewellery","Animation","Fashion design"]
+  },
+  "Music & Performance": {
+    color: "#3498db",
+    items: ["Accordion","Bagpipes","Band","Brass band","Cello","Choir","Comedy","Concert","DJ","Drama class","Flute","Folk music","Guitar","Guitar lessons","Harp","Hip hop","Improv","Jazz","Karaoke","Magician","Magic","Mandolin","Marching band","Music","Music lessons","Music production","Music studio","Oboe","Open mic","Opera","Orchestra","Percussion","Piano","Piano tuner","Podcast studio","Podcasting","Rap","Recording studio","Saxophone","Singing","String quartet","Theatre","Trumpet","Ukulele","Viola","Violin","Vocal coaching","Zither","Busking","Circus","Clown","Fire dancing","Harmonica","Pantomime","Puppet theatre","Puppet making","Recital","Chamber music","Drum circle","Ear training","Field recording","Gospel choir","Live music","Music festival","Music library","Music memorabilia","Piano bar","Pop choir","Luthier","Rap battle"]
+  },
+  "Food & Drink": {
+    color: "#f39c12",
+    items: ["Bakery","Beer","Brewery","Butcher","Cafe","Catering","Cheese making","Chocolate making","Cider","Coffee roasting","Cooking class","Craft beer","Deli","Distillery","Fast food","Fermentation","Fish market","Fishmonger","Food bank","Food co-op","Food sharing","Food truck","Foraging","Health food","Honey","Ice cream","Juice bar","Kombucha","Korean BBQ","Maple syrup","Organic food","Pickle making","Private chef","Restaurant","Smoothie","Sommelier","Sourdough starter","Street food","Surplus food","Sushi","Tea house","Whisky","Wine","Wine tasting","Farmers market","Grocery delivery","Community kitchen","Produce box","Allergy-free food","Dairy free","Ethnic grocery","Farm-to-table","Food allergy","Food cart","Food delivery","Food forest","Food photography","Food safety","Food testing","Frozen food","Gluten free","Halal food","Jam making","Kefir","Kosher food","Meal delivery","Meal prep","Mead","Olive oil","Paleo food","Pancake house","Pizza delivery","Pop-up restaurant","Raw food","Sugar free","Fruit picking","Home brew","Milk delivery","Poultry","Night market","Morning market"]
+  },
+  "Home & Garden": {
+    color: "#2ecc71",
+    items: ["Air conditioning","Air purifier","Allotment garden","Appliance repair","Balcony garden","Bathroom fitting","Blinds","Carpet cleaning","Carpet fitting","Chimney sweep","Cleaning service","Clock repair","Community garden","Compost","Container garden","Curtain fitting","Custom furniture","Decking","Door fitting","Double glazing","Electrician","Fence building","Flooring","Florist","Foundation repair","Fridge repair","Furniture rental","Furniture repair","Furniture restoration","Garden furniture","Gardening","Greenhouse","Gutter cleaning","Gutter repair","Hardwood floor","Heat pump","Heating","Herb garden","Home automation","Home staging","House cleaning","House painting","House plant","HVAC","Hydroponics","Indoor garden","Insulation","Interior design","Irrigation","Kitchen fitting","Kitchen garden","Landscape design","Lawn care","Locksmith","Painter","Patio","Pergola","Plant nursery","Plant swap","Plastering","Plumber","Pool cleaning","Power washing","Roofing","Rug cleaning","Self-storage","Smart home","Solar panel","Storage space","Tile work","Upholstery","Wallpaper","Water filter","Window cleaner","Window fitting","Feng shui","Floor sanding","Basement waterproofing","Boiler repair","Ceiling repair","Color consulting","Damp proofing","Deep cleaning","Drainage","Firewood","French drain","Furnace","Gas fitting","Gate repair","Green roof","Grey water","Hot tub","House boat","Insect hotel","LED lighting","Lightning rod","Living wall","Mold removal","Mulch","Noise insulation","Plunge pool","Polytunnel","Rain barrel","Rain garden","Rainwater harvesting","Room divider","Rooftop garden","Rose garden","Stucco","Concrete","Concrete cutting","Gravel","Lumber","Masonry","Scaffolding","Sheet metal","Bricklayer","Carpenter","Glazier","Joinery"]
+  },
+  "Professional Services": {
+    color: "#8e44ad",
+    items: ["Accountant","Advertising","Architect","Auditor","Bookkeeper","Consulting","Customs broker","Design","Editing","Employment agency","Energy consultant","Estate agent","Estate planning","Event planning","Financial advisor","Freelancer","Grant writing","Graphic design","Insurance","Investment","Lawyer","Life coach","Matchmaking","Mortgage","Notary","Notary public","Patent attorney","Photographer","Private investigator","Property management","Real estate","Resume writing","Surveyor","Tax advisor","Tour guide","Translator","Web design","Wedding planner","Background check","Bail bond","Business coaching","Business insurance","Business mentoring","Career counselling","Company registration","Concierge","Contract review","Copyright","Court reporter","Executive coaching","Market research","Media training","Mortgage broker","Mystery shopping","Pension advice","Personal assistant","Personal shopper","Press release","Privacy consultant","Process serving","Proofreading","Property auction","Quote comparison","Referral service","Relocation","Shopping service","Translator certified","Interpreter","Court interpreter","Certified translation","Customs clearance","Immigration lawyer","Environmental law","Family law","Legal aid","Probate","Public defender","Pro bono","Elder law","Lease review","Debt counselling","Mediation","Mediator"]
+  },
+  "Education & Learning": {
+    color: "#16a085",
+    items: ["Adult education","Afterschool programme","Apprenticeship","Bilingual school","Book club","Coding","Coding bootcamp","Computer class","Continuing education","Conversation partner","Correspondence course","Creative writing","Debate club","Digital literacy","Diploma","Driving instructor","Driving school","Evening class","Exchange programme","Exchange student","Financial literacy","Flight school","Foreign language","Forest school","French lessons","German lessons","Homeschooling","Home schooling group","Homework help","Intercultural training","International school","Internship","Job fair","Job interview coaching","Kindergarten","Language exchange","Language lessons","Language tandem","Library","Literacy programme","Master class","Math tutoring","Montessori","Night school","Nursery","One-to-one tutoring","Online course","Pilot training","Polish lessons","Pre-school","Private tuition","Professional development","Reading group","Reading tutor","Retraining","School","Science club","Sign language","Spanish lessons","Study group","Summer camp","Textbook","Tutoring","Typing","University","Waldorf school","Writing group","Audio book","Braille","Film club","History club","Philosophy group","Poetry"]
+  },
+  "Technology": {
+    color: "#2980b9",
+    items: ["3D printing","App development","Artificial intelligence","Assistive technology","Blockchain","Computer repair","Crypto","Data recovery","Drone","Drone photography","Electronics","Game design","Hackerspace","IT support","Laser cutting","Maker space","Network cabling","Phone repair","Programming","Robotics","Software","Video editing","Virtual reality","VPN","Wifi","Audio engineering","Cable management","Mechanical keyboard","Delivery robot","Online marketplace","Rural internet"]
+  },
+  "Community & Social": {
+    color: "#e91e63",
+    items: ["Alumni network","Barter","Bingo","Board game","Board game cafe","Book swap","Bridge club","Charity","Cloth swap","Co-housing","Community centre","Community radio","Cooperative","Couch surfing","Coworking","Credit union","Crowdfunding","Donation","Flat share","Flea market","Friendship","Game night","Garage sale","Hobby","House swap","Housing co-op","Humanitarian aid","Lending circle","Local currency","Local history","Mutual aid","Neighbourhood watch","Networking event","Nonprofit","Pen pal","Pub quiz","Quiz night","Repair cafe","Second hand","Seed swap","Thrift shop","Tool library","Toy swap","Upcycling","Volunteer","Workers union","Community choir","Community cinema","Community fridge","Community land trust","Community orchard","Community pharmacy","Cooperative housing","Cultural exchange","Dinner club","Expat community","Full moon gathering","Grandparent group","Group buy","Men's group","New parent","Parent group","Peace garden","Potluck","Rotary club","Rummage sale","Workshop","Youth centre","Youth group","Scouts","Village hall","Senior centre","Retirement home","Jumble sale","Open garden","Open studio","Gay","Religion","Church","Mosque","Synagogue","Temple","Quaker meeting","Prayer group","Multi-faith","Rosary group"]
+  },
+  "Children & Family": {
+    color: "#ff7043",
+    items: ["Adoption","Au pair","Babysitter","Baby equipment","Baby massage","Baby swimming","Bounce house rental","Childcare","Day care","Foster care","Kids party","Nanny","Playground","Toy library","Breastfeeding support","Cloth diaper","Diaper service","Early intervention","Face painting","Home birth","Infant massage","Maternity wear","Newborn photography","Parent coaching","Pregnancy support","Prenatal yoga","Birth photography","Adoption agency","Bar mitzvah","Birth certificate","Balloon artist","Push chair"]
+  },
+  "Animals & Pets": {
+    color: "#795548",
+    items: ["Animal rescue","Animal shelter","Apiary","Bee keeping","Bird watching","Cat cafe","Cat sitting","Dog grooming","Dog park","Dog sitting","Dog training","Dog walking","Exotic animal","Falconry","Fish tank","Goat keeping","Guide dog","Horse boarding","Horse rescue","Kennel","Livestock","Pet adoption","Pet food","Pet grooming","Pet insurance","Pet sitting","Pet store","Rabbit breeder","Reptile care","Rescue dog","Cat adoption","Animal physiotherapy","Pet cemetery","Pet cremation","Pet dental","Pet photography","Pet therapy","Pet transport","Pigeon control","Pony club","Rabbit rescue","Reptile rescue","Livestock auction","Humane trap","Lost pet","Ostrich farm","Oyster farm","Koi pond"]
+  },
+  "Environment & Sustainability": {
+    color: "#4caf50",
+    items: ["Battery recycling","Biodynamic farming","Carbon offset","Climate change","Conservation","E-waste","Forestry","Ocean cleanup","Off-grid","Organic farm","Permaculture","Photovoltaics","Pollution monitoring","Recycling","Refill station","Renewable energy","River cleanup","Sustainability","Tree care","Tree planting","Urban farming","Wildlife","Wind energy","Zero waste","Aluminium recycling","Beach cleanup","Biodiversity","Bio waste","Carbon footprint","Cellphone recycling","Chemical disposal","Climate adaptation","Composting toilet","Conservation volunteer","Copper recycling","Coral restoration","Desalination","Environmental audit","Environmental education","Erosion control","Fossil fuel divestment","Geothermal","Glass recycling","Green building","Green burial","Greenhouse gas","Habitat restoration","Heirloom seed","Hydro power","Litter picking","Mangrove restoration","Net zero","Paint recycling","Paper recycling","Peat-free","Plastic recycling","Pollinator garden","Rewilding","Stormwater","Seed library","Dark sky","Eco building","Eco tour","Energy cooperative","Energy storage","Fuel cell","Frog pond","Ground source heat","Mushroom foraging","Mushroom growing","Nature reserve"]
+  },
+  "Transport & Mobility": {
+    color: "#607d8b",
+    items: ["Airport shuttle","Auto body shop","Auto glass","Bicycle courier","Bike messenger","Bike rental","Bike repair","Bike share","Boat","Boat rental","Bus shuttle","Car","Car charging","Car detailing","Car pool","Car rental","Car share","Car wash","Cargo bike","Courier","Cycle shop","Delivery","E-bike","E-scooter","Ferry","Flight","Helicopter","Limo","Mechanic","Mobile mechanic","Motorcycle","Motorcycle repair","Mover","Moving service","Oil change","Ride share","Rv rental","Scooter","Shipping","Taxi","Tire service","Towing service","Used car","Bike fitting","Bike storage","Bike tour","Boat licence","Boat storage","Camper van","Cycling tour","Electric vehicle","Engine rebuild","Freight","Limousine","Mass transit","Mobility aid","Mobility scooter","Money transfer","Moped","Motor home","Parking","Parking garage","Party bus","Pedal boat","Petrol delivery","Rail travel","Roadside assistance","Route planning","Gas station","Wheelchair access","Wheelchair repair","Air freight","Airport parking","Coach hire","Zeppelin"]
+  },
+  "Events & Entertainment": {
+    color: "#ff5722",
+    items: ["Adventure park","Amusement park","Aquarium","Auction","Balloon ride","Botanical garden","Carnival","Cinema","Escape room","Event","Event photography","Festival","Haunted house","Holiday rental","Museum","Outdoor cinema","Photo booth","Planetarium","Pop-up shop","Zoo","Convention centre","Corporate event","Drive-in cinema","Flash mob","Harvest festival","Heritage railway","Light festival","Lighthouse tour","Mine tour","Moonlight cinema","Night hike","Outdoor theatre","Party supply","Reenactment","Tent rental","Marquee rental","Costume rental","Carnival costume","Formal wear","Dress rental","Fashion rental","Film screening","Observatory","Skateboard park"]
+  },
+  "Housing & Property": {
+    color: "#9c27b0",
+    items: ["Apartment","Apartment swap","Attic conversion","Barn conversion","Bed & breakfast","Building inspection","Building permit","Cabin rental","Convalescent home","Dormitory","Duplex","Emergency housing","Emergency shelter","Estate sale","Fixer upper","Garage conversion","Guest house","Half-way house","Homeless shelter","Hostel","Hotel","House","House sitting","Housing advice","Housing benefit","Log cabin","Property tax","Rental","Rental inspection","Rent assistance","Residential care","Student housing","Tiny house","Home exchange","Home insurance","Home security","Boundary dispute","Deed poll","Cohabitation agreement","Home assessment","Camping ground"]
+  },
+  "Trade & Repair": {
+    color: "#ff9800",
+    items: ["Alterations","Bike repair","Chimney repair","Clothing repair","Dressmaker","Dry cleaning","Exterminator","Fountain repair","Glasses repair","Graffiti removal","Handyman","Key cutting","Lamp repair","Laundry","Marble restoration","Mural restoration","Painting restoration","Panel beater","Plumber","Repair shop","Rug cleaning","Sewing machine repair","Sharpening","Shoe repair","Shoemaker","Tailor","Umbrella repair","Watch repair","Antique restoration","Art restoration","Bed bug treatment","Book repair","Asbestos removal","Demolition","Junk removal","Photo restoration","Pipe fitting","Pump repair","Sand blasting","Septic service","Shed building","Tree surgery","Weed control","Well drilling","Dead animal removal","Fumigation","Pest control","Pressure washing","Rubbish removal","Dressmaker","Power washing","Rope access","Rigging","Welding"]
+  },
+  "Safety & Emergency": {
+    color: "#f44336",
+    items: ["Alarm system","Ambulance","CCTV","Emergency food","Emergency plumber","Escape route","Evacuation plan","Fire alarm","Fire department","Fire escape","Fire safety","First responder","Flood insurance","Flood protection","Hotline","Lifeguard","Mountain rescue","Paramedic training","Police","Road safety","Security","Smoke detector","Earthquake prep","Night shelter"]
+  },
+  "Government & Civic": {
+    color: "#546e7a",
+    items: ["Anti-discrimination","Asylum","Census","Citizenship","Civil ceremony","Complaints office","Consumer protection","Deportation defence","Dispute resolution","Document shredding","Election volunteer","Emigration","Family mediation","Human rights","Immigration advice","Jury duty","Marriage licence","Name change","Notarization","Ombudsman","Parole officer","Postal vote","Prison ministry","Prison pen pal","Prison visitor","Refugee","Refugee sponsorship","Restorative justice","Subsidies","Annulment","Honour killing support","Bullying support","Child protection","Disability services","Deaf services","Dyslexia support","Autism support","Elderly care","Companion care","Dementia care","End-of-life care","Home nursing","Home visit doctor","Homeless outreach","Hunger relief","Overnight care","Respite care","Social worker","Patient advocacy","Hospice volunteer","Caretaker","Chaplain","Hospital chaplain","Contraception","Public health","Needle exchange","Rehabilitation"]
+  }
+};
+
+// Deduplicate
+Object.values(DATA).forEach(cat => { cat.items = [...new Set(cat.items)]; });
+
+let currentView = 'cloud';
+let activeCategory = null;
+let searchTerm = '';
+
+// Category filters
+const filtersEl = document.getElementById('categoryFilters');
+const allBtn = document.createElement('button');
+allBtn.className = 'cat-btn active';
+allBtn.textContent = 'All';
+allBtn.style.borderColor = '#667eea';
+allBtn.style.color = '#fff';
+allBtn.onclick = () => { activeCategory = null; renderFilters(); render(); };
+filtersEl.appendChild(allBtn);
+
+Object.entries(DATA).forEach(([name, {color, items}]) => {
+  const btn = document.createElement('button');
+  btn.className = 'cat-btn';
+  btn.innerHTML = `${name} <span class="count">${items.length}</span>`;
+  btn.onclick = () => {
+    activeCategory = activeCategory === name ? null : name;
+    renderFilters();
+    render();
+  };
+  btn.dataset.cat = name;
+  btn.dataset.color = color;
+  filtersEl.appendChild(btn);
+});
+
+function renderFilters() {
+  filtersEl.querySelectorAll('.cat-btn').forEach(b => {
+    const isAll = !b.dataset.cat;
+    if (isAll) {
+      b.classList.toggle('active', !activeCategory);
+      b.style.borderColor = !activeCategory ? '#667eea' : 'rgba(255,255,255,0.08)';
+      b.style.color = !activeCategory ? '#fff' : '#888';
+    } else {
+      const active = activeCategory === b.dataset.cat;
+      b.classList.toggle('active', active);
+      b.style.borderColor = active ? b.dataset.color : 'rgba(255,255,255,0.08)';
+      b.style.background = active ? b.dataset.color + '22' : 'rgba(255,255,255,0.03)';
+      b.style.color = active ? '#fff' : '#888';
+    }
+  });
+}
+
+function getAllItems() {
+  let all = [];
+  Object.entries(DATA).forEach(([cat, {color, items}]) => {
+    items.forEach(item => all.push({item, cat, color}));
+  });
+  return all;
+}
+
+function getFilteredItems() {
+  let items = getAllItems();
+  if (activeCategory) items = items.filter(i => i.cat === activeCategory);
+  return items;
+}
+
+function isSearchMatch(item) {
+  if (!searchTerm) return true;
+  return item.toLowerCase().includes(searchTerm.toLowerCase());
+}
+
+// Seeded shuffle for stable cloud layout (re-shuffles only on category change)
+let shuffleSeed = 1;
+function seededRandom() {
+  shuffleSeed = (shuffleSeed * 16807) % 2147483647;
+  return (shuffleSeed - 1) / 2147483646;
+}
+function seededShuffle(arr, seed) {
+  shuffleSeed = seed;
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(seededRandom() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function render() {
+  const items = getFilteredItems();
+  const matchCount = items.filter(i => isSearchMatch(i.item)).length;
+
+  document.getElementById('totalCount').textContent = getAllItems().length;
+  document.getElementById('catCount').textContent = Object.keys(DATA).length;
+  document.getElementById('visibleCount').textContent = matchCount;
+  document.getElementById('matchCount').textContent = searchTerm ? `${matchCount} match${matchCount !== 1 ? 'es' : ''}` : '';
+
+  if (currentView === 'cloud') renderCloud(items);
+  else if (currentView === 'treemap') renderTreemap();
+  else renderList();
+}
+
+function renderCloud(items) {
+  const el = document.getElementById('cloudView');
+  const shuffled = seededShuffle(items, 42);
+  el.innerHTML = shuffled.map(({item, cat, color}) => {
+    const match = isSearchMatch(item);
+    const cls = searchTerm ? (match ? 'search-hit' : 'dim') : '';
+    return `<span class="cloud-tag ${cls}" style="background:${color}18; color:${color}; border:1px solid ${color}33;">${item}<span class="tooltip">${cat}</span></span>`;
+  }).join('');
+}
+
+function renderTreemap() {
+  const el = document.getElementById('treemapView');
+  const cats = activeCategory ? {[activeCategory]: DATA[activeCategory]} : DATA;
+  el.innerHTML = Object.entries(cats).map(([name, {color, items}]) => {
+    const sorted = [...items].sort((a,b) => a.localeCompare(b));
+    return `<div class="treemap-category">
+      <h3><span class="dot" style="background:${color}"></span>${name} <span class="cat-count">${items.length}</span></h3>
+      <div class="treemap-items">${sorted.map(item => {
+        const match = isSearchMatch(item);
+        const cls = searchTerm ? (match ? 'highlight' : 'dim') : '';
+        const bg = searchTerm && match ? `background:${color}33;` : '';
+        return `<span class="treemap-item ${cls}" style="${bg}">${item}</span>`;
+      }).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderList() {
+  const el = document.getElementById('listView');
+  const cats = activeCategory ? {[activeCategory]: DATA[activeCategory]} : DATA;
+  let html = '';
+  Object.entries(cats).forEach(([name, {color, items}]) => {
+    html += `<div class="list-cat-header" style="color:${color}">${name}</div>`;
+    [...items].sort((a,b) => a.localeCompare(b)).forEach(item => {
+      const match = isSearchMatch(item);
+      const cls = searchTerm ? (match ? 'highlight' : 'dim') : '';
+      html += `<div class="list-item ${cls}">${item}</div>`;
+    });
+  });
+  el.innerHTML = html;
+}
+
+// View switching
+document.querySelectorAll('.view-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentView = btn.dataset.view;
+    document.getElementById('cloudView').style.display = currentView === 'cloud' ? 'flex' : 'none';
+    document.getElementById('treemapView').className = currentView === 'treemap' ? 'treemap-view active' : 'treemap-view';
+    document.getElementById('listView').className = currentView === 'list' ? 'list-view active' : 'list-view';
+    render();
+  });
+});
+
+// Search with debounce
+let searchTimeout;
+document.getElementById('searchInput').addEventListener('input', e => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    searchTerm = e.target.value;
+    render();
+  }, 80);
+});
+
+render();
+</script>
+</body>
+</html>

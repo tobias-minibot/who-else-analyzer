@@ -1,0 +1,13 @@
+{
+  "name": "who-else-analyzer",
+  "version": "0.1.0",
+  "private": false,
+  "description": "The semantic kernel of things people ask about — mapped across 20 domains. 1,344 entries analyzed and visualized.",
+  "scripts": {
+    "dev": "open src/who-else-visualization.html",
+    "serve": "npx serve public -p 3001",
+    "analyze": "node scripts/analyze-catalog.js"
+  },
+  "keywords": ["who-else", "semantic-kernel", "catalog", "visualization"],
+  "license": "MIT"
+}
