@@ -1,0 +1,1461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Who Else? — Semantic Kernel Map</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: #0a0a0f;
+    color: #e0e0e0;
+    overflow-x: hidden;
+  }
+
+  /* Header */
+  header {
+    text-align: center;
+    padding: 40px 20px 10px;
+  }
+  header h1 {
+    font-size: 2.8rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  header p {
+    color: #888;
+    font-size: 1.05rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  /* Hero search */
+  .hero-search {
+    max-width: 850px;
+    margin: 30px auto 10px;
+    padding: 0 20px;
+    text-align: center;
+  }
+  .hero-search-input {
+    width: 100%;
+    max-width: 800px;
+    height: 68px;
+    padding: 0 28px;
+    font-size: 1.5rem;
+    border: 2px solid rgba(102,126,234,0.4);
+    border-radius: 18px;
+    background: rgba(255,255,255,0.04);
+    color: #fff;
+    outline: none;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .hero-search-input:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 30px rgba(102,126,234,0.25);
+  }
+  .hero-search-input::placeholder { color: #555; font-size: 1.3rem; }
+  .hero-search-hint {
+    color: #555;
+    font-size: 0.82rem;
+    margin-top: 8px;
+  }
+  .fuzzy-results {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+    min-height: 60px;
+  }
+  .fuzzy-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px;
+    padding: 18px 24px;
+    min-width: 220px;
+    max-width: 280px;
+    text-align: left;
+    transition: border-color 0.3s, transform 0.2s;
+  }
+  .fuzzy-card:hover { transform: translateY(-2px); }
+  .fuzzy-card-name {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 4px;
+  }
+  .fuzzy-card-domain {
+    font-size: 0.78rem;
+    padding: 2px 10px;
+    border-radius: 10px;
+    display: inline-block;
+    margin-bottom: 6px;
+  }
+  .fuzzy-card-score {
+    font-size: 0.75rem;
+    color: #666;
+  }
+
+  /* Coverage gauge */
+  .top-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 40px;
+    padding: 10px 20px 10px;
+    flex-wrap: wrap;
+  }
+  .stats-bar {
+    display: flex;
+    gap: 40px;
+  }
+  .stat { text-align: center; }
+  .stat .num {
+    font-size: 2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .stat .label { font-size: 0.8rem; color: #666; text-transform: uppercase; letter-spacing: 1px; }
+
+  .coverage-gauge {
+    position: relative;
+    width: 110px;
+    height: 110px;
+    cursor: help;
+  }
+  .coverage-gauge svg { transform: rotate(-90deg); }
+  .coverage-gauge .gauge-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+  .coverage-gauge .gauge-pct {
+    font-size: 1.5rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .coverage-gauge .gauge-label {
+    font-size: 0.6rem;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .coverage-tooltip {
+    display: none;
+    position: absolute;
+    bottom: 115%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1a2e;
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 0.72rem;
+    white-space: nowrap;
+    color: #aaa;
+    pointer-events: none;
+    z-index: 200;
+  }
+  .coverage-gauge:hover .coverage-tooltip { display: block; }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    padding: 15px 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(10,10,15,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .search-box {
+    flex: 0 1 320px;
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.05);
+    color: #fff;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-box:focus { border-color: #667eea; }
+  .search-box::placeholder { color: #555; }
+
+  .view-toggle {
+    display: flex;
+    gap: 4px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 10px;
+    padding: 4px;
+  }
+  .view-btn {
+    padding: 8px 16px;
+    border: none;
+    background: transparent;
+    color: #888;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+  }
+  .view-btn.active { background: #667eea; color: #fff; }
+  .view-btn:hover:not(.active) { color: #ccc; }
+
+  .match-count {
+    font-size: 0.85rem;
+    color: #555;
+    min-width: 100px;
+    text-align: right;
+  }
+
+  .category-filters {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 20px 15px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .cat-btn {
+    padding: 5px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+    color: #888;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all 0.25s;
+    white-space: nowrap;
+  }
+  .cat-btn:hover { border-color: rgba(255,255,255,0.2); color: #ccc; }
+  .cat-btn.active { border-color: transparent; color: #fff; }
+  .cat-btn .count { opacity: 0.5; margin-left: 4px; }
+
+  .grid-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 10px 20px 60px;
+  }
+
+  /* Cloud view */
+  .cloud-view {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    padding: 20px;
+    min-height: 400px;
+  }
+  .cloud-tag {
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    cursor: default;
+    transition: all 0.25s;
+    opacity: 0.85;
+    position: relative;
+  }
+  .cloud-tag:hover {
+    opacity: 1;
+    transform: scale(1.08);
+    z-index: 10;
+  }
+  .cloud-tag .tooltip {
+    display: none;
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1a2e;
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    color: #ccc;
+    pointer-events: none;
+    margin-bottom: 6px;
+  }
+  .cloud-tag:hover .tooltip { display: block; }
+
+  /* Treemap view */
+  .treemap-view {
+    display: none;
+    gap: 8px;
+    padding: 10px;
+  }
+  .treemap-view.active { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+  .treemap-category {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+    padding: 16px;
+    transition: border-color 0.3s;
+  }
+  .treemap-category:hover { border-color: rgba(255,255,255,0.12); }
+  .treemap-category h3 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .treemap-category h3 .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .treemap-category h3 .cat-count {
+    font-weight: 400;
+    color: #555;
+    font-size: 0.75rem;
+  }
+  .treemap-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .treemap-item {
+    padding: 3px 10px;
+    border-radius: 5px;
+    font-size: 0.75rem;
+    background: rgba(255,255,255,0.04);
+    color: #aaa;
+    transition: all 0.2s;
+    cursor: default;
+  }
+  .treemap-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .treemap-item.highlight { color: #fff; font-weight: 600; }
+
+  /* List view */
+  .list-view {
+    display: none;
+    column-count: 4;
+    column-gap: 20px;
+    padding: 10px;
+  }
+  .list-view.active { display: block; }
+  .list-item {
+    padding: 4px 0;
+    font-size: 0.82rem;
+    color: #888;
+    break-inside: avoid;
+    transition: color 0.2s;
+    cursor: default;
+  }
+  .list-item:hover { color: #fff; }
+  .list-item.highlight { color: #667eea; font-weight: 600; }
+  .list-cat-header {
+    font-weight: 700;
+    color: #ccc;
+    padding: 12px 0 4px;
+    font-size: 0.9rem;
+    break-inside: avoid;
+    break-after: avoid;
+  }
+
+  /* Graph view */
+  .graph-view {
+    display: none;
+    width: 100%;
+    min-height: 700px;
+    position: relative;
+  }
+  .graph-view.active { display: block; }
+  .graph-view svg {
+    width: 100%;
+    height: 700px;
+    background: #0a0a0f;
+  }
+
+  /* Ranking view */
+  .ranking-view {
+    display: none;
+    padding: 10px;
+  }
+  .ranking-view.active { display: block; }
+  .ranking-histogram {
+    margin-bottom: 20px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+    padding: 20px;
+  }
+  .ranking-histogram h3 {
+    font-size: 0.9rem;
+    color: #aaa;
+    margin-bottom: 12px;
+  }
+  .histogram-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 100px;
+  }
+  .histogram-bar {
+    flex: 1;
+    border-radius: 4px 4px 0 0;
+    min-width: 8px;
+    position: relative;
+    transition: opacity 0.2s;
+  }
+  .histogram-bar:hover { opacity: 0.8; }
+  .histogram-bar .hist-label {
+    position: absolute;
+    bottom: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.6rem;
+    color: #555;
+    white-space: nowrap;
+  }
+  .ranking-filter {
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .ranking-filter select {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.05);
+    color: #fff;
+    font-size: 0.85rem;
+    outline: none;
+  }
+  .ranking-filter label {
+    font-size: 0.85rem;
+    color: #888;
+  }
+  .ranking-list-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .ranking-pos {
+    width: 40px;
+    text-align: right;
+    font-weight: 700;
+    color: #555;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+  }
+  .ranking-bar-wrap {
+    flex: 1;
+    height: 26px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+  }
+  .ranking-bar-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 0.5s ease;
+    display: flex;
+    align-items: center;
+    padding-left: 10px;
+  }
+  .ranking-bar-name {
+    font-size: 0.78rem;
+    color: #fff;
+    font-weight: 600;
+    white-space: nowrap;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  }
+  .ranking-domain-badge {
+    font-size: 0.68rem;
+    padding: 2px 8px;
+    border-radius: 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .ranking-score-val {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #888;
+    width: 32px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .dim { opacity: 0.12 !important; }
+  .search-hit { opacity: 1 !important; }
+
+  @media (max-width: 900px) {
+    header h1 { font-size: 1.8rem; }
+    .list-view.active { column-count: 2; }
+    .stats-bar { gap: 20px; }
+    .stat .num { font-size: 1.5rem; }
+    .treemap-view.active { grid-template-columns: 1fr; }
+    .hero-search-input { height: 56px; font-size: 1.2rem; }
+    .fuzzy-card { min-width: 160px; }
+    .top-row { gap: 20px; }
+  }
+  @media (max-width: 600px) {
+    .list-view.active { column-count: 1; }
+    .fuzzy-results { flex-direction: column; align-items: center; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Who Else?</h1>
+  <p>The semantic kernel of things people ask about — mapped across 20 domains</p>
+</header>
+
+<!-- FEATURE 1: GIANT SEARCH BAR -->
+<div class="hero-search">
+  <input class="hero-search-input" type="text" placeholder="What do you need help with?" id="heroSearch" autocomplete="off">
+  <div class="hero-search-hint">Try "fix my car", "learn to cook", "feeling lonely", "teeth hurt"…</div>
+  <div class="fuzzy-results" id="fuzzyResults"></div>
+</div>
+
+<!-- Stats + Coverage gauge -->
+<div class="top-row">
+  <div class="stats-bar">
+    <div class="stat"><div class="num" id="totalCount">0</div><div class="label">Entries</div></div>
+    <div class="stat"><div class="num" id="catCount">0</div><div class="label">Domains</div></div>
+    <div class="stat"><div class="num" id="visibleCount">0</div><div class="label">Showing</div></div>
+  </div>
+  <!-- FEATURE 3: COVERAGE GAUGE -->
+  <div class="coverage-gauge" id="coverageGauge">
+    <svg width="110" height="110" viewBox="0 0 110 110">
+      <circle cx="55" cy="55" r="48" stroke="rgba(255,255,255,0.06)" stroke-width="8" fill="none"/>
+      <circle id="coverageArc" cx="55" cy="55" r="48" stroke="url(#gaugeGrad)" stroke-width="8" fill="none"
+        stroke-linecap="round" stroke-dasharray="301.59" stroke-dashoffset="301.59"/>
+      <defs>
+        <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#667eea"/>
+          <stop offset="100%" stop-color="#764ba2"/>
+        </linearGradient>
+      </defs>
+    </svg>
+    <div class="gauge-text">
+      <div class="gauge-pct" id="gaugePct">0%</div>
+      <div class="gauge-label">Coverage</div>
+    </div>
+    <div class="coverage-tooltip">Based on an estimated 1,800 distinct services and activities people commonly seek</div>
+  </div>
+</div>
+
+<div class="controls">
+  <input class="search-box" type="text" placeholder="Filter entries…" id="searchInput">
+  <div class="view-toggle">
+    <button class="view-btn active" data-view="cloud">Cloud</button>
+    <button class="view-btn" data-view="treemap">Treemap</button>
+    <button class="view-btn" data-view="graph">Graph</button>
+    <button class="view-btn" data-view="ranking">Ranking</button>
+    <button class="view-btn" data-view="list">List</button>
+  </div>
+  <div class="match-count" id="matchCount"></div>
+</div>
+
+<div class="category-filters" id="categoryFilters"></div>
+
+<div class="grid-container">
+  <div class="cloud-view" id="cloudView" style="display:flex"></div>
+  <div class="treemap-view" id="treemapView"></div>
+  <div class="graph-view" id="graphView"></div>
+  <div class="ranking-view" id="rankingView"></div>
+  <div class="list-view" id="listView"></div>
+</div>
+
+<script>
+const DATA = {
+  "Health & Medical": {
+    color: "#e74c3c",
+    items: ["Acupuncture","Allergist","Audiologist","Ayurveda","Birth doula","Blood donation","Bone marrow donation","Cardiology","Chiropractor","Covid test","CPR training","Dentist","Dermatologist","Diabetic care","Dietitian","Doctor","Doula","Emergency dentist","Emergency room","EMT","Eye doctor","First aid","Hearing aid","Herbalist","Hospice","Hospital","Hypnotherapy","Midwife","Naturopath","Neurologist","Nurse","Nutritionist","Occupational therapy","Ophthalmologist","Optician","Optometrist","Orthodontist","Orthopedist","Osteopath","Palliative care","Paramedic","Pharmacy","Physical therapy","Physiotherapy","Podiatrist","Prosthetics","Psychiatrist","Psychologist","Sleep clinic","Speech therapy","Sports medicine","Surgeon","Urologist","Veterinarian","Vet","Emergency vet","Burn care","Clinical trial","Cosmetic dentistry","Dental hygiene","Denture","Bone density","Epidural","Eye surgery","Fertility clinic","Flu shot","Foot care","Genetic testing","Health screening","Hearing test","Heart surgery","Immunization","Intensive care","IV therapy","Joint replacement","Ketamine therapy","Kidney dialysis","Mammogram","Medical alert","Medical cannabis","Medical imaging","Medical records","Medical tourism","Medication delivery","Memory care","Mobile dentist","Mobile vet","Mouth guard","Neonatal care","Nuclear medicine","Oncology","Orthotics","Outpatient","Plastic surgery","Poison control","Post-natal care","Prenatal care","Prescription delivery","Prosthetic limb","Pulmonologist","Radiation therapy","Rapid testing","Epi pen","Incontinence care","Inpatient care","Blood bank"]
+  },
+  "Mental Health & Wellness": {
+    color: "#9b59b6",
+    items: ["Addiction counselling","Art therapy","Counselling","Crisis hotline","Detox","Family therapy","Grief counselling","Group therapy","Healing","Massage","Meditation","Meditation group","Mental health","Mindfulness","Music therapy","Reflexology","Reiki","Sound healing","Therapy","Wellness","Breath work","Cold plunge","Couple counselling","Crisis intervention","Cryotherapy","Depression support","Digital detox","Float tank","Forest bathing","Guided meditation","Narrative therapy","Pain management","Peer counselling","Peer support","Play therapy","Post-trauma support","Recovery group","Relationship coaching","Resilience training","Substance abuse","Support group","Bereavement","Child counselling","Conflict coaching","Dream interpretation","Emotional support animal","Equine therapy","Grief group","Mourning group","Cupping","Body work","Abortion counselling","Age counselling","Euthanasia counselling","Gender counselling","Menopause support"]
+  },
+  "Sports & Fitness": {
+    color: "#e67e22",
+    items: ["Acrobatics","Aikido","Archery","Badminton","Baseball","Basketball","Beach volleyball","Billiards","Boot camp","Bowling","Boxing","Bungee jumping","Climbing","Cricket","Crossfit","Cycle","Dance","Disc golf","Diving","Equestrian","Exercise class","Fencing sport","Fitness","Go-kart","Golf","Gym","Gymnastics","Handball","Hiking","Hockey","Horse riding","Ice hockey","Ice skating","Indoor climbing","Judo","Karate","Kayak","Kickboxing","Kite surfing","Lacrosse","Martial arts","Mini golf","Mountain biking","Mountaineering","Orienteering","Paddleboard","Paintball","Paragliding","Parkour","Personal trainer","Pilates","Polo","Racquetball","Rafting","Rock climbing","Roller derby","Roller skating","Rowing","Rugby","Running group","Sailing","Scuba diving","Self-defence","Skateboard","Ski","Skydiving","Slacklining","Snorkelling","Snowboard","Spinning class","Sport","Sports club","Squash","Surf","Swimming lessons","Swimming pool","Table tennis","Tai chi","Tennis","Trampoline","Triathlon","Volleyball","Water polo","Watersport","Wrestling","Yoga","Zumba","Aerial yoga","Caving","Cross-country skiing","Disability sport","Flag football","Fly fishing","Gliding","Hang gliding","Inline skating","Jet ski","Junior sports","Lane swimming","Lap pool","Lawn bowling","Line dancing","Marathon","Motor sport","Mud run","Nordic walking","Obstacle course","Open water swimming","Outdoor fitness","Outdoor pool","Paddle tennis","Parachuting","Pickleball","Pole vault","Relay race","Rounders","Laser tag","Luge","Hula hoop","Hunting","Fishing","Darts","Juggling","Unicycle","Tree climbing"]
+  },
+  "Arts & Crafts": {
+    color: "#1abc9c",
+    items: ["Art class","Art gallery","Art supplies","Batik","Beading","Book binding","Calligraphy","Candle making","Ceramics","Crochet","Embroidery","Glass blowing","Hat making","Illustration","Jewellery making","Knitting","Leather craft","Letterpress","Lithography","Macram\u00e9","Model making","Mosaic","Mural","Needlework","Origami","Paper making","Pottery","Quilting","Screen printing","Sculpture","Sewing","Silk screen","Silversmith","Stained glass","Textile art","Watercolour","Weaving","Woodcarving","Woodworking","Carving","Drawing class","Painting class","Darkroom","Framing","Dried flowers","Engraver","Botanical illustration","Chalk art","Fibre arts","Lace making","Marbling","Mask making","Miniature painting","Oil painting","Pattern making","Portrait painting","Pyrography","Ring making","Rug weaving","Soap making","T-shirt printing","Dyeing","Iron work","Metal work","Blacksmith","Custom jewellery","Animation","Fashion design"]
+  },
+  "Music & Performance": {
+    color: "#3498db",
+    items: ["Accordion","Bagpipes","Band","Brass band","Cello","Choir","Comedy","Concert","DJ","Drama class","Flute","Folk music","Guitar","Guitar lessons","Harp","Hip hop","Improv","Jazz","Karaoke","Magician","Magic","Mandolin","Marching band","Music","Music lessons","Music production","Music studio","Oboe","Open mic","Opera","Orchestra","Percussion","Piano","Piano tuner","Podcast studio","Podcasting","Rap","Recording studio","Saxophone","Singing","String quartet","Theatre","Trumpet","Ukulele","Viola","Violin","Vocal coaching","Zither","Busking","Circus","Clown","Fire dancing","Harmonica","Pantomime","Puppet theatre","Puppet making","Recital","Chamber music","Drum circle","Ear training","Field recording","Gospel choir","Live music","Music festival","Music library","Music memorabilia","Piano bar","Pop choir","Luthier","Rap battle"]
+  },
+  "Food & Drink": {
+    color: "#f39c12",
+    items: ["Bakery","Beer","Brewery","Butcher","Cafe","Catering","Cheese making","Chocolate making","Cider","Coffee roasting","Cooking class","Craft beer","Deli","Distillery","Fast food","Fermentation","Fish market","Fishmonger","Food bank","Food co-op","Food sharing","Food truck","Foraging","Health food","Honey","Ice cream","Juice bar","Kombucha","Korean BBQ","Maple syrup","Organic food","Pickle making","Private chef","Restaurant","Smoothie","Sommelier","Sourdough starter","Street food","Surplus food","Sushi","Tea house","Whisky","Wine","Wine tasting","Farmers market","Grocery delivery","Community kitchen","Produce box","Allergy-free food","Dairy free","Ethnic grocery","Farm-to-table","Food allergy","Food cart","Food delivery","Food forest","Food photography","Food safety","Food testing","Frozen food","Gluten free","Halal food","Jam making","Kefir","Kosher food","Meal delivery","Meal prep","Mead","Olive oil","Paleo food","Pancake house","Pizza delivery","Pop-up restaurant","Raw food","Sugar free","Fruit picking","Home brew","Milk delivery","Poultry","Night market","Morning market"]
+  },
+  "Home & Garden": {
+    color: "#2ecc71",
+    items: ["Air conditioning","Air purifier","Allotment garden","Appliance repair","Balcony garden","Bathroom fitting","Blinds","Carpet cleaning","Carpet fitting","Chimney sweep","Cleaning service","Clock repair","Community garden","Compost","Container garden","Curtain fitting","Custom furniture","Decking","Door fitting","Double glazing","Electrician","Fence building","Flooring","Florist","Foundation repair","Fridge repair","Furniture rental","Furniture repair","Furniture restoration","Garden furniture","Gardening","Greenhouse","Gutter cleaning","Gutter repair","Hardwood floor","Heat pump","Heating","Herb garden","Home automation","Home staging","House cleaning","House painting","House plant","HVAC","Hydroponics","Indoor garden","Insulation","Interior design","Irrigation","Kitchen fitting","Kitchen garden","Landscape design","Lawn care","Locksmith","Painter","Patio","Pergola","Plant nursery","Plant swap","Plastering","Plumber","Pool cleaning","Power washing","Roofing","Rug cleaning","Self-storage","Smart home","Solar panel","Storage space","Tile work","Upholstery","Wallpaper","Water filter","Window cleaner","Window fitting","Feng shui","Floor sanding","Basement waterproofing","Boiler repair","Ceiling repair","Color consulting","Damp proofing","Deep cleaning","Drainage","Firewood","French drain","Furnace","Gas fitting","Gate repair","Green roof","Grey water","Hot tub","House boat","Insect hotel","LED lighting","Lightning rod","Living wall","Mold removal","Mulch","Noise insulation","Plunge pool","Polytunnel","Rain barrel","Rain garden","Rainwater harvesting","Room divider","Rooftop garden","Rose garden","Stucco","Concrete","Concrete cutting","Gravel","Lumber","Masonry","Scaffolding","Sheet metal","Bricklayer","Carpenter","Glazier","Joinery"]
+  },
+  "Professional Services": {
+    color: "#8e44ad",
+    items: ["Accountant","Advertising","Architect","Auditor","Bookkeeper","Consulting","Customs broker","Design","Editing","Employment agency","Energy consultant","Estate agent","Estate planning","Event planning","Financial advisor","Freelancer","Grant writing","Graphic design","Insurance","Investment","Lawyer","Life coach","Matchmaking","Mortgage","Notary","Notary public","Patent attorney","Photographer","Private investigator","Property management","Real estate","Resume writing","Surveyor","Tax advisor","Tour guide","Translator","Web design","Wedding planner","Background check","Bail bond","Business coaching","Business insurance","Business mentoring","Career counselling","Company registration","Concierge","Contract review","Copyright","Court reporter","Executive coaching","Market research","Media training","Mortgage broker","Mystery shopping","Pension advice","Personal assistant","Personal shopper","Press release","Privacy consultant","Process serving","Proofreading","Property auction","Quote comparison","Referral service","Relocation","Shopping service","Translator certified","Interpreter","Court interpreter","Certified translation","Customs clearance","Immigration lawyer","Environmental law","Family law","Legal aid","Probate","Public defender","Pro bono","Elder law","Lease review","Debt counselling","Mediation","Mediator"]
+  },
+  "Education & Learning": {
+    color: "#16a085",
+    items: ["Adult education","Afterschool programme","Apprenticeship","Bilingual school","Book club","Coding","Coding bootcamp","Computer class","Continuing education","Conversation partner","Correspondence course","Creative writing","Debate club","Digital literacy","Diploma","Driving instructor","Driving school","Evening class","Exchange programme","Exchange student","Financial literacy","Flight school","Foreign language","Forest school","French lessons","German lessons","Homeschooling","Home schooling group","Homework help","Intercultural training","International school","Internship","Job fair","Job interview coaching","Kindergarten","Language exchange","Language lessons","Language tandem","Library","Literacy programme","Master class","Math tutoring","Montessori","Night school","Nursery","One-to-one tutoring","Online course","Pilot training","Polish lessons","Pre-school","Private tuition","Professional development","Reading group","Reading tutor","Retraining","School","Science club","Sign language","Spanish lessons","Study group","Summer camp","Textbook","Tutoring","Typing","University","Waldorf school","Writing group","Audio book","Braille","Film club","History club","Philosophy group","Poetry"]
+  },
+  "Technology": {
+    color: "#2980b9",
+    items: ["3D printing","App development","Artificial intelligence","Assistive technology","Blockchain","Computer repair","Crypto","Data recovery","Drone","Drone photography","Electronics","Game design","Hackerspace","IT support","Laser cutting","Maker space","Network cabling","Phone repair","Programming","Robotics","Software","Video editing","Virtual reality","VPN","Wifi","Audio engineering","Cable management","Mechanical keyboard","Delivery robot","Online marketplace","Rural internet"]
+  },
+  "Community & Social": {
+    color: "#e91e63",
+    items: ["Alumni network","Barter","Bingo","Board game","Board game cafe","Book swap","Bridge club","Charity","Cloth swap","Co-housing","Community centre","Community radio","Cooperative","Couch surfing","Coworking","Credit union","Crowdfunding","Donation","Flat share","Flea market","Friendship","Game night","Garage sale","Hobby","House swap","Housing co-op","Humanitarian aid","Lending circle","Local currency","Local history","Mutual aid","Neighbourhood watch","Networking event","Nonprofit","Pen pal","Pub quiz","Quiz night","Repair cafe","Second hand","Seed swap","Thrift shop","Tool library","Toy swap","Upcycling","Volunteer","Workers union","Community choir","Community cinema","Community fridge","Community land trust","Community orchard","Community pharmacy","Cooperative housing","Cultural exchange","Dinner club","Expat community","Full moon gathering","Grandparent group","Group buy","Men's group","New parent","Parent group","Peace garden","Potluck","Rotary club","Rummage sale","Workshop","Youth centre","Youth group","Scouts","Village hall","Senior centre","Retirement home","Jumble sale","Open garden","Open studio","Gay","Religion","Church","Mosque","Synagogue","Temple","Quaker meeting","Prayer group","Multi-faith","Rosary group"]
+  },
+  "Children & Family": {
+    color: "#ff7043",
+    items: ["Adoption","Au pair","Babysitter","Baby equipment","Baby massage","Baby swimming","Bounce house rental","Childcare","Day care","Foster care","Kids party","Nanny","Playground","Toy library","Breastfeeding support","Cloth diaper","Diaper service","Early intervention","Face painting","Home birth","Infant massage","Maternity wear","Newborn photography","Parent coaching","Pregnancy support","Prenatal yoga","Birth photography","Adoption agency","Bar mitzvah","Birth certificate","Balloon artist","Push chair"]
+  },
+  "Animals & Pets": {
+    color: "#795548",
+    items: ["Animal rescue","Animal shelter","Apiary","Bee keeping","Bird watching","Cat cafe","Cat sitting","Dog grooming","Dog park","Dog sitting","Dog training","Dog walking","Exotic animal","Falconry","Fish tank","Goat keeping","Guide dog","Horse boarding","Horse rescue","Kennel","Livestock","Pet adoption","Pet food","Pet grooming","Pet insurance","Pet sitting","Pet store","Rabbit breeder","Reptile care","Rescue dog","Cat adoption","Animal physiotherapy","Pet cemetery","Pet cremation","Pet dental","Pet photography","Pet therapy","Pet transport","Pigeon control","Pony club","Rabbit rescue","Reptile rescue","Livestock auction","Humane trap","Lost pet","Ostrich farm","Oyster farm","Koi pond"]
+  },
+  "Environment & Sustainability": {
+    color: "#4caf50",
+    items: ["Battery recycling","Biodynamic farming","Carbon offset","Climate change","Conservation","E-waste","Forestry","Ocean cleanup","Off-grid","Organic farm","Permaculture","Photovoltaics","Pollution monitoring","Recycling","Refill station","Renewable energy","River cleanup","Sustainability","Tree care","Tree planting","Urban farming","Wildlife","Wind energy","Zero waste","Aluminium recycling","Beach cleanup","Biodiversity","Bio waste","Carbon footprint","Cellphone recycling","Chemical disposal","Climate adaptation","Composting toilet","Conservation volunteer","Copper recycling","Coral restoration","Desalination","Environmental audit","Environmental education","Erosion control","Fossil fuel divestment","Geothermal","Glass recycling","Green building","Green burial","Greenhouse gas","Habitat restoration","Heirloom seed","Hydro power","Litter picking","Mangrove restoration","Net zero","Paint recycling","Paper recycling","Peat-free","Plastic recycling","Pollinator garden","Rewilding","Stormwater","Seed library","Dark sky","Eco building","Eco tour","Energy cooperative","Energy storage","Fuel cell","Frog pond","Ground source heat","Mushroom foraging","Mushroom growing","Nature reserve"]
+  },
+  "Transport & Mobility": {
+    color: "#607d8b",
+    items: ["Airport shuttle","Auto body shop","Auto glass","Bicycle courier","Bike messenger","Bike rental","Bike repair","Bike share","Boat","Boat rental","Bus shuttle","Car","Car charging","Car detailing","Car pool","Car rental","Car share","Car wash","Cargo bike","Courier","Cycle shop","Delivery","E-bike","E-scooter","Ferry","Flight","Helicopter","Limo","Mechanic","Mobile mechanic","Motorcycle","Motorcycle repair","Mover","Moving service","Oil change","Ride share","Rv rental","Scooter","Shipping","Taxi","Tire service","Towing service","Used car","Bike fitting","Bike storage","Bike tour","Boat licence","Boat storage","Camper van","Cycling tour","Electric vehicle","Engine rebuild","Freight","Limousine","Mass transit","Mobility aid","Mobility scooter","Money transfer","Moped","Motor home","Parking","Parking garage","Party bus","Pedal boat","Petrol delivery","Rail travel","Roadside assistance","Route planning","Gas station","Wheelchair access","Wheelchair repair","Air freight","Airport parking","Coach hire","Zeppelin"]
+  },
+  "Events & Entertainment": {
+    color: "#ff5722",
+    items: ["Adventure park","Amusement park","Aquarium","Auction","Balloon ride","Botanical garden","Carnival","Cinema","Escape room","Event","Event photography","Festival","Haunted house","Holiday rental","Museum","Outdoor cinema","Photo booth","Planetarium","Pop-up shop","Zoo","Convention centre","Corporate event","Drive-in cinema","Flash mob","Harvest festival","Heritage railway","Light festival","Lighthouse tour","Mine tour","Moonlight cinema","Night hike","Outdoor theatre","Party supply","Reenactment","Tent rental","Marquee rental","Costume rental","Carnival costume","Formal wear","Dress rental","Fashion rental","Film screening","Observatory","Skateboard park"]
+  },
+  "Housing & Property": {
+    color: "#9c27b0",
+    items: ["Apartment","Apartment swap","Attic conversion","Barn conversion","Bed & breakfast","Building inspection","Building permit","Cabin rental","Convalescent home","Dormitory","Duplex","Emergency housing","Emergency shelter","Estate sale","Fixer upper","Garage conversion","Guest house","Half-way house","Homeless shelter","Hostel","Hotel","House","House sitting","Housing advice","Housing benefit","Log cabin","Property tax","Rental","Rental inspection","Rent assistance","Residential care","Student housing","Tiny house","Home exchange","Home insurance","Home security","Boundary dispute","Deed poll","Cohabitation agreement","Home assessment","Camping ground"]
+  },
+  "Trade & Repair": {
+    color: "#ff9800",
+    items: ["Alterations","Bike repair","Chimney repair","Clothing repair","Dressmaker","Dry cleaning","Exterminator","Fountain repair","Glasses repair","Graffiti removal","Handyman","Key cutting","Lamp repair","Laundry","Marble restoration","Mural restoration","Painting restoration","Panel beater","Plumber","Repair shop","Rug cleaning","Sewing machine repair","Sharpening","Shoe repair","Shoemaker","Tailor","Umbrella repair","Watch repair","Antique restoration","Art restoration","Bed bug treatment","Book repair","Asbestos removal","Demolition","Junk removal","Photo restoration","Pipe fitting","Pump repair","Sand blasting","Septic service","Shed building","Tree surgery","Weed control","Well drilling","Dead animal removal","Fumigation","Pest control","Pressure washing","Rubbish removal","Dressmaker","Power washing","Rope access","Rigging","Welding"]
+  },
+  "Safety & Emergency": {
+    color: "#f44336",
+    items: ["Alarm system","Ambulance","CCTV","Emergency food","Emergency plumber","Escape route","Evacuation plan","Fire alarm","Fire department","Fire escape","Fire safety","First responder","Flood insurance","Flood protection","Hotline","Lifeguard","Mountain rescue","Paramedic training","Police","Road safety","Security","Smoke detector","Earthquake prep","Night shelter"]
+  },
+  "Government & Civic": {
+    color: "#546e7a",
+    items: ["Anti-discrimination","Asylum","Census","Citizenship","Civil ceremony","Complaints office","Consumer protection","Deportation defence","Dispute resolution","Document shredding","Election volunteer","Emigration","Family mediation","Human rights","Immigration advice","Jury duty","Marriage licence","Name change","Notarization","Ombudsman","Parole officer","Postal vote","Prison ministry","Prison pen pal","Prison visitor","Refugee","Refugee sponsorship","Restorative justice","Subsidies","Annulment","Honour killing support","Bullying support","Child protection","Disability services","Deaf services","Dyslexia support","Autism support","Elderly care","Companion care","Dementia care","End-of-life care","Home nursing","Home visit doctor","Homeless outreach","Hunger relief","Overnight care","Respite care","Social worker","Patient advocacy","Hospice volunteer","Caretaker","Chaplain","Hospital chaplain","Contraception","Public health","Needle exchange","Rehabilitation"]
+  }
+};
+
+// Deduplicate
+Object.values(DATA).forEach(cat => { cat.items = [...new Set(cat.items)]; });
+
+// ==================== FEATURE 1: FUZZY SEARCH ====================
+const SYNONYMS = {
+  "fix": ["repair","mechanic","handyman","plumber","electrician","appliance repair"],
+  "learn": ["class","lessons","tutoring","course","school","education","training"],
+  "sick": ["doctor","hospital","clinic","pharmacy","nurse","emergency room"],
+  "money": ["bank","accountant","financial advisor","credit union","investment","mortgage"],
+  "eat": ["restaurant","cafe","food","bakery","catering","food delivery","grocery delivery"],
+  "move": ["mover","moving service","relocation"],
+  "pain": ["doctor","physiotherapy","massage","chiropractor","osteopath","pain management"],
+  "broken": ["repair","repair shop","handyman","appliance repair"],
+  "kids": ["childcare","babysitter","playground","nanny","day care","kindergarten"],
+  "old": ["elderly care","retirement home","companion care","dementia care","respite care"],
+  "green": ["sustainability","recycling","organic","renewable energy","permaculture"],
+  "pet": ["dog","cat","animal","veterinarian","vet","pet grooming","dog walking"],
+  "music": ["guitar","piano","singing","choir","music lessons","concert","violin"],
+  "sport": ["gym","fitness","exercise class","personal trainer","sports club"],
+  "house": ["home","apartment","housing","rental","house cleaning","interior design"],
+  "job": ["employment agency","career counselling","resume writing","job fair","freelancer"],
+  "law": ["lawyer","legal aid","family law","immigration lawyer","public defender"],
+  "teeth": ["dentist","orthodontist","dental hygiene","cosmetic dentistry","emergency dentist"],
+  "eye": ["optician","ophthalmologist","eye doctor","eye surgery","optometrist"],
+  "baby": ["nanny","babysitter","midwife","childcare","baby massage","newborn photography"],
+  "wedding": ["wedding planner","florist","catering","photographer","event planning"],
+  "die": ["funeral","hospice","grief counselling","end-of-life care","palliative care"],
+  "death": ["funeral","hospice","grief counselling","end-of-life care","bereavement"],
+  "drunk": ["addiction counselling","detox","substance abuse","recovery group"],
+  "alcohol": ["addiction counselling","detox","substance abuse","recovery group"],
+  "lonely": ["counselling","friendship","support group","community centre","peer support"],
+  "scared": ["therapy","crisis hotline","counselling","crisis intervention"],
+  "rent": ["rental","apartment","housing","housing advice","rent assistance"],
+  "build": ["construction","carpenter","architect","bricklayer","masonry"],
+  "plant": ["garden","gardening","plant nursery","tree planting","herb garden"],
+  "paint": ["painter","painting class","house painting","art class","oil painting"],
+  "sing": ["choir","singing","vocal coaching","karaoke","gospel choir"],
+  "dance": ["dance","line dancing","zumba","salsa"],
+  "photo": ["photographer","photography","event photography","pet photography"],
+  "travel": ["flight","hotel","tour guide","holiday rental","airport shuttle"],
+  "safe": ["security","alarm system","police","CCTV","fire safety"],
+  "clean": ["cleaning service","house cleaning","deep cleaning","laundry","dry cleaning"],
+  "teach": ["tutoring","school","teacher","private tuition","adult education"],
+  "drive": ["driving school","taxi","car rental","driving instructor","ride share"],
+  "car": ["mechanic","car rental","car wash","auto body shop","car pool","car repair","used car"],
+  "cook": ["cooking class","restaurant","private chef","catering","meal prep"],
+  "dog": ["dog walking","dog grooming","dog training","dog park","dog sitting"],
+  "cat": ["cat sitting","cat cafe","cat adoption","pet sitting"],
+  "help": ["volunteer","charity","mutual aid","support group","crisis hotline"],
+  "anxiety": ["therapy","counselling","meditation","mindfulness","mental health"],
+  "sad": ["counselling","therapy","depression support","crisis hotline","mental health"],
+  "stress": ["meditation","yoga","massage","therapy","mindfulness","wellness"],
+  "weight": ["gym","personal trainer","dietitian","nutritionist","fitness"],
+  "sleep": ["sleep clinic","meditation","therapy","wellness"],
+  "hair": ["hairdresser","barber"],
+  "bike": ["bike repair","bike rental","bike share","cycling tour","e-bike"],
+  "computer": ["computer repair","IT support","computer class","programming"],
+  "phone": ["phone repair","IT support"],
+  "internet": ["wifi","rural internet","IT support"],
+  "read": ["library","book club","reading group","literacy programme"],
+  "write": ["creative writing","writing group","grant writing","resume writing"],
+  "swim": ["swimming pool","swimming lessons","open water swimming"],
+  "run": ["running group","marathon","personal trainer"],
+  "yoga": ["yoga","aerial yoga","pilates","meditation"],
+  "gym": ["gym","fitness","personal trainer","exercise class","crossfit"],
+  "doctor": ["doctor","hospital","clinic","emergency room","home visit doctor"],
+  "lawyer": ["lawyer","legal aid","family law","immigration lawyer"],
+  "school": ["school","kindergarten","pre-school","homeschooling","waldorf school","montessori"],
+  "garden": ["gardening","community garden","herb garden","allotment garden"],
+  "recycle": ["recycling","e-waste","battery recycling","glass recycling","plastic recycling"],
+  "emergency": ["ambulance","fire department","police","emergency room","crisis hotline"],
+  "mental": ["mental health","therapy","counselling","psychiatrist","psychologist"],
+  "pregnant": ["midwife","prenatal care","doula","pregnancy support","prenatal yoga"],
+  "teeth hurt": ["dentist","emergency dentist"],
+  "back pain": ["physiotherapy","chiropractor","osteopath","massage"],
+  "fix my car": ["mechanic","auto body shop","mobile mechanic"],
+  "learn to cook": ["cooking class","private chef","meal prep"],
+  "feeling lonely": ["counselling","friendship","support group","community centre"],
+};
+
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  // Use two-row optimization
+  let prev = new Array(n + 1);
+  let curr = new Array(n + 1);
+  for (let j = 0; j <= n; j++) prev[j] = j;
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= n; j++) {
+      curr[j] = a[i-1] === b[j-1] ? prev[j-1] : 1 + Math.min(prev[j], curr[j-1], prev[j-1]);
+    }
+    [prev, curr] = [curr, prev];
+  }
+  return prev[n];
+}
+
+function fuzzyScore(query, item, cat) {
+  const q = query.toLowerCase().trim();
+  const t = item.toLowerCase();
+  if (!q) return 0;
+
+  let score = 0;
+
+  // Exact match
+  if (t === q) return 200;
+
+  // Starts with
+  if (t.startsWith(q)) score += 100;
+
+  // Contains
+  if (t.includes(q)) score += 80;
+
+  // Word overlap
+  const qWords = q.split(/\s+/);
+  const tWords = t.split(/[\s\-\/&]+/);
+  let wordHits = 0;
+  qWords.forEach(qw => {
+    if (tWords.some(tw => tw.startsWith(qw) || tw.includes(qw))) wordHits++;
+  });
+  if (qWords.length > 0) score += (wordHits / qWords.length) * 60;
+
+  // Levenshtein on whole string (normalized)
+  const dist = levenshtein(q, t);
+  const maxLen = Math.max(q.length, t.length);
+  const sim = 1 - dist / maxLen;
+  score += sim * 30;
+
+  // Levenshtein on individual words
+  qWords.forEach(qw => {
+    tWords.forEach(tw => {
+      const d = levenshtein(qw, tw);
+      const ml = Math.max(qw.length, tw.length);
+      if (ml > 0 && d / ml < 0.35) score += 25;
+    });
+  });
+
+  // Synonym/keyword expansion
+  const allItems = getAllItemsFlat();
+  qWords.forEach(qw => {
+    Object.entries(SYNONYMS).forEach(([key, vals]) => {
+      if (qw.includes(key) || key.includes(qw) || levenshtein(qw, key) <= 1) {
+        vals.forEach(v => {
+          if (t.includes(v.toLowerCase())) score += 70;
+        });
+      }
+    });
+  });
+  // Also check multi-word synonym keys
+  Object.entries(SYNONYMS).forEach(([key, vals]) => {
+    if (key.length > 3 && (q.includes(key) || levenshtein(q, key) <= 2)) {
+      vals.forEach(v => {
+        if (t.includes(v.toLowerCase())) score += 70;
+      });
+    }
+  });
+
+  return score;
+}
+
+function getAllItemsFlat() {
+  const all = [];
+  Object.entries(DATA).forEach(([cat, {color, items}]) => {
+    items.forEach(item => all.push({item, cat, color}));
+  });
+  return all;
+}
+
+function fuzzySearch(query) {
+  if (!query || !query.trim()) return [];
+  const all = getAllItemsFlat();
+  const scored = all.map(entry => ({
+    ...entry,
+    score: fuzzyScore(query, entry.item, entry.cat)
+  })).filter(e => e.score > 15);
+  scored.sort((a, b) => b.score - a.score);
+  // Deduplicate by item name
+  const seen = new Set();
+  const results = [];
+  for (const s of scored) {
+    if (!seen.has(s.item)) {
+      seen.add(s.item);
+      results.push(s);
+    }
+    if (results.length >= 3) break;
+  }
+  return results;
+}
+
+function renderFuzzyResults(query) {
+  const el = document.getElementById('fuzzyResults');
+  if (!query || !query.trim()) {
+    el.innerHTML = '';
+    return;
+  }
+  const results = fuzzySearch(query);
+  if (results.length === 0) {
+    el.innerHTML = '<div style="color:#555;font-size:0.9rem;padding:10px;">No close matches found. Try different words.</div>';
+    return;
+  }
+  const maxScore = results[0].score;
+  el.innerHTML = results.map(r => {
+    const pct = Math.min(99, Math.round(r.score / maxScore * 100));
+    return `<div class="fuzzy-card" style="border-color:${r.color}44;">
+      <div class="fuzzy-card-name" style="color:${r.color}">${r.item}</div>
+      <div class="fuzzy-card-domain" style="background:${r.color}22;color:${r.color}">${r.cat}</div>
+      <div class="fuzzy-card-score">Relevance: ${pct}%</div>
+    </div>`;
+  }).join('');
+}
+
+let heroTimeout;
+document.getElementById('heroSearch').addEventListener('input', e => {
+  clearTimeout(heroTimeout);
+  heroTimeout = setTimeout(() => renderFuzzyResults(e.target.value), 120);
+});
+
+
+// ==================== FEATURE 4: IMPORTANCE SCORING ====================
+const TIER1_KEYWORDS = new Set([
+  "doctor","hospital","pharmacy","restaurant","school","bank","grocery delivery",
+  "dentist","police","fire department","ambulance","plumber","electrician","lawyer",
+  "childcare","taxi","emergency room","nurse"
+]);
+const TIER2_KEYWORDS = new Set([
+  "mechanic","gym","hairdresser","barber","bakery","cafe","hotel","cleaning service",
+  "insurance","accountant","moving service","delivery","parking","car rental",
+  "public transport","supermarket","mover","personal trainer"
+]);
+const TIER3_PATTERNS = ["yoga","swimming","piano","photography","veterinarian","counselling",
+  "massage","tutoring","art class","dance","gardening","interior design","catering","florist",
+  "library","driving school","vet","midwife","therapy","meditation","fitness","cooking class",
+  "pet","dog","cat","church","mosque","recycling","volunteer","charity","community"];
+const TIER4_PATTERNS = ["pottery","archery","calligraphy","fermentation","kombucha","model making",
+  "quilting","drone","chess","coin","knitting","crochet","embroidery","origami","candle",
+  "soap","macram","batik","beading","letterpress","billiards","disc golf","slackline",
+  "orienteering","paddle","marbling","miniature","pyrography","ring making","rug weav"];
+const TIER5_PATTERNS = ["falconry","bagpipes","luthier","zeppelin","luge","pyrography",
+  "oar","dowsing","butoh","zither","mandolin","lithography","hat making","silk screen",
+  "darkroom","busking","pantomime","puppet","clown"];
+
+function getImportanceScore(item) {
+  const low = item.toLowerCase();
+  if (TIER1_KEYWORDS.has(low)) return 95;
+  if (TIER2_KEYWORDS.has(low)) return 82;
+  for (const p of TIER5_PATTERNS) { if (low.includes(p.toLowerCase())) return 15 + Math.floor(Math.random()*15); }
+  for (const p of TIER4_PATTERNS) { if (low.includes(p.toLowerCase())) return 35 + Math.floor(Math.random()*18); }
+  for (const p of TIER3_PATTERNS) { if (low.includes(p.toLowerCase())) return 55 + Math.floor(Math.random()*18); }
+
+  // Heuristic: common service words get higher scores
+  const highWords = ["emergency","hospital","doctor","health","medical","school","food","home","house","repair","care","child","safety","fire","water","electric","heat","transport"];
+  const medWords = ["class","club","service","shop","support","group","lesson","training","therapy","clinic","centre","studio","rental","delivery"];
+  let base = 45;
+  for (const w of highWords) { if (low.includes(w)) { base = Math.max(base, 68); break; } }
+  for (const w of medWords) { if (low.includes(w)) { base = Math.max(base, 55); break; } }
+
+  // Use a deterministic hash to add small variance
+  let hash = 0;
+  for (let i = 0; i < item.length; i++) hash = ((hash << 5) - hash + item.charCodeAt(i)) | 0;
+  const variance = ((Math.abs(hash) % 15) - 7);
+  return Math.max(10, Math.min(100, base + variance));
+}
+
+// Pre-compute scores deterministically (seed the random to be deterministic)
+let _rngState = 42;
+function detRng() { _rngState = (_rngState * 16807) % 2147483647; return (_rngState - 1) / 2147483646; }
+function getImportanceScoreDet(item) {
+  const low = item.toLowerCase();
+  if (TIER1_KEYWORDS.has(low)) return 95;
+  if (TIER2_KEYWORDS.has(low)) return 82;
+  for (const p of TIER5_PATTERNS) { if (low.includes(p.toLowerCase())) return 15 + Math.floor(detRng()*15); }
+  for (const p of TIER4_PATTERNS) { if (low.includes(p.toLowerCase())) return 35 + Math.floor(detRng()*18); }
+  for (const p of TIER3_PATTERNS) { if (low.includes(p.toLowerCase())) return 55 + Math.floor(detRng()*18); }
+  const highWords = ["emergency","hospital","doctor","health","medical","school","food","home","house","repair","care","child","safety","fire","water","electric","heat","transport"];
+  const medWords = ["class","club","service","shop","support","group","lesson","training","therapy","clinic","centre","studio","rental","delivery"];
+  let base = 45;
+  for (const w of highWords) { if (low.includes(w)) { base = Math.max(base, 68); break; } }
+  for (const w of medWords) { if (low.includes(w)) { base = Math.max(base, 55); break; } }
+  let hash = 0;
+  for (let i = 0; i < item.length; i++) hash = ((hash << 5) - hash + item.charCodeAt(i)) | 0;
+  const variance = ((Math.abs(hash) % 15) - 7);
+  return Math.max(10, Math.min(100, base + variance));
+}
+
+// Build scored items
+const ALL_SCORED = [];
+_rngState = 42;
+Object.entries(DATA).forEach(([cat, {color, items}]) => {
+  items.forEach(item => {
+    ALL_SCORED.push({ item, cat, color, score: getImportanceScoreDet(item) });
+  });
+});
+ALL_SCORED.sort((a, b) => b.score - a.score);
+
+
+// ==================== MAIN APP STATE ====================
+let currentView = 'cloud';
+let activeCategory = null;
+let searchTerm = '';
+let graphInitialized = false;
+
+// Category filters
+const filtersEl = document.getElementById('categoryFilters');
+const allBtn = document.createElement('button');
+allBtn.className = 'cat-btn active';
+allBtn.textContent = 'All';
+allBtn.style.borderColor = '#667eea';
+allBtn.style.color = '#fff';
+allBtn.onclick = () => { activeCategory = null; renderFilters(); render(); };
+filtersEl.appendChild(allBtn);
+
+Object.entries(DATA).forEach(([name, {color, items}]) => {
+  const btn = document.createElement('button');
+  btn.className = 'cat-btn';
+  btn.innerHTML = `${name} <span class="count">${items.length}</span>`;
+  btn.onclick = () => {
+    activeCategory = activeCategory === name ? null : name;
+    renderFilters();
+    render();
+  };
+  btn.dataset.cat = name;
+  btn.dataset.color = color;
+  filtersEl.appendChild(btn);
+});
+
+function renderFilters() {
+  filtersEl.querySelectorAll('.cat-btn').forEach(b => {
+    const isAll = !b.dataset.cat;
+    if (isAll) {
+      b.classList.toggle('active', !activeCategory);
+      b.style.borderColor = !activeCategory ? '#667eea' : 'rgba(255,255,255,0.08)';
+      b.style.color = !activeCategory ? '#fff' : '#888';
+    } else {
+      const active = activeCategory === b.dataset.cat;
+      b.classList.toggle('active', active);
+      b.style.borderColor = active ? b.dataset.color : 'rgba(255,255,255,0.08)';
+      b.style.background = active ? b.dataset.color + '22' : 'rgba(255,255,255,0.03)';
+      b.style.color = active ? '#fff' : '#888';
+    }
+  });
+}
+
+function getAllItems() {
+  let all = [];
+  Object.entries(DATA).forEach(([cat, {color, items}]) => {
+    items.forEach(item => all.push({item, cat, color}));
+  });
+  return all;
+}
+
+function getFilteredItems() {
+  let items = getAllItems();
+  if (activeCategory) items = items.filter(i => i.cat === activeCategory);
+  return items;
+}
+
+function isSearchMatch(item) {
+  if (!searchTerm) return true;
+  return item.toLowerCase().includes(searchTerm.toLowerCase());
+}
+
+// Seeded shuffle
+let shuffleSeed = 1;
+function seededRandom() {
+  shuffleSeed = (shuffleSeed * 16807) % 2147483647;
+  return (shuffleSeed - 1) / 2147483646;
+}
+function seededShuffle(arr, seed) {
+  shuffleSeed = seed;
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(seededRandom() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function render() {
+  const items = getFilteredItems();
+  const matchCount = items.filter(i => isSearchMatch(i.item)).length;
+
+  document.getElementById('totalCount').textContent = getAllItems().length;
+  document.getElementById('catCount').textContent = Object.keys(DATA).length;
+  document.getElementById('visibleCount').textContent = matchCount;
+  document.getElementById('matchCount').textContent = searchTerm ? `${matchCount} match${matchCount !== 1 ? 'es' : ''}` : '';
+
+  if (currentView === 'cloud') renderCloud(items);
+  else if (currentView === 'treemap') renderTreemap();
+  else if (currentView === 'graph') renderGraph();
+  else if (currentView === 'ranking') renderRanking();
+  else renderList();
+}
+
+function renderCloud(items) {
+  const el = document.getElementById('cloudView');
+  const shuffled = seededShuffle(items, 42);
+  el.innerHTML = shuffled.map(({item, cat, color}) => {
+    const match = isSearchMatch(item);
+    const cls = searchTerm ? (match ? 'search-hit' : 'dim') : '';
+    return `<span class="cloud-tag ${cls}" style="background:${color}18; color:${color}; border:1px solid ${color}33;">${item}<span class="tooltip">${cat}</span></span>`;
+  }).join('');
+}
+
+function renderTreemap() {
+  const el = document.getElementById('treemapView');
+  const cats = activeCategory ? {[activeCategory]: DATA[activeCategory]} : DATA;
+  el.innerHTML = Object.entries(cats).map(([name, {color, items}]) => {
+    const sorted = [...items].sort((a,b) => a.localeCompare(b));
+    return `<div class="treemap-category">
+      <h3><span class="dot" style="background:${color}"></span>${name} <span class="cat-count">${items.length}</span></h3>
+      <div class="treemap-items">${sorted.map(item => {
+        const match = isSearchMatch(item);
+        const cls = searchTerm ? (match ? 'highlight' : 'dim') : '';
+        const bg = searchTerm && match ? `background:${color}33;` : '';
+        return `<span class="treemap-item ${cls}" style="${bg}">${item}</span>`;
+      }).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderList() {
+  const el = document.getElementById('listView');
+  const cats = activeCategory ? {[activeCategory]: DATA[activeCategory]} : DATA;
+  let html = '';
+  Object.entries(cats).forEach(([name, {color, items}]) => {
+    html += `<div class="list-cat-header" style="color:${color}">${name}</div>`;
+    [...items].sort((a,b) => a.localeCompare(b)).forEach(item => {
+      const match = isSearchMatch(item);
+      const cls = searchTerm ? (match ? 'highlight' : 'dim') : '';
+      html += `<div class="list-item ${cls}">${item}</div>`;
+    });
+  });
+  el.innerHTML = html;
+}
+
+
+// ==================== FEATURE 2: ONTOLOGY GRAPH ====================
+const DOMAIN_CONNECTIONS = [
+  ["Health & Medical", "Mental Health & Wellness"],
+  ["Health & Medical", "Sports & Fitness"],
+  ["Health & Medical", "Children & Family"],
+  ["Health & Medical", "Safety & Emergency"],
+  ["Mental Health & Wellness", "Community & Social"],
+  ["Mental Health & Wellness", "Education & Learning"],
+  ["Sports & Fitness", "Education & Learning"],
+  ["Arts & Crafts", "Music & Performance"],
+  ["Arts & Crafts", "Education & Learning"],
+  ["Food & Drink", "Home & Garden"],
+  ["Food & Drink", "Events & Entertainment"],
+  ["Home & Garden", "Trade & Repair"],
+  ["Home & Garden", "Environment & Sustainability"],
+  ["Professional Services", "Government & Civic"],
+  ["Professional Services", "Technology"],
+  ["Education & Learning", "Technology"],
+  ["Community & Social", "Government & Civic"],
+  ["Community & Social", "Children & Family"],
+  ["Animals & Pets", "Environment & Sustainability"],
+  ["Transport & Mobility", "Environment & Sustainability"],
+  ["Housing & Property", "Home & Garden"],
+  ["Safety & Emergency", "Government & Civic"],
+  ["Events & Entertainment", "Music & Performance"],
+  ["Trade & Repair", "Transport & Mobility"],
+];
+
+let graphSim = null;
+let graphSvg = null;
+
+function renderGraph() {
+  const container = document.getElementById('graphView');
+  if (graphInitialized) return; // Only build once
+  graphInitialized = true;
+
+  const width = container.clientWidth || 1200;
+  const height = 700;
+
+  // Build nodes and links
+  const domainNames = Object.keys(DATA);
+  const nodes = [];
+  const links = [];
+  const domainNodeMap = {};
+
+  // Domain nodes
+  domainNames.forEach((name, i) => {
+    const node = { id: name, type: 'domain', color: DATA[name].color, radius: 30 };
+    nodes.push(node);
+    domainNodeMap[name] = node;
+  });
+
+  // Entry nodes
+  Object.entries(DATA).forEach(([cat, {color, items}]) => {
+    items.forEach(item => {
+      const nid = cat + '::' + item;
+      nodes.push({ id: nid, label: item, type: 'entry', color, radius: 4, domain: cat });
+      links.push({ source: cat, target: nid, type: 'member' });
+    });
+  });
+
+  // Domain-domain connections
+  DOMAIN_CONNECTIONS.forEach(([a, b]) => {
+    links.push({ source: a, target: b, type: 'domain-link' });
+  });
+
+  const svg = d3.select(container).append('svg')
+    .attr('width', width)
+    .attr('height', height);
+
+  const g = svg.append('g');
+
+  // Zoom
+  const zoom = d3.zoom()
+    .scaleExtent([0.15, 5])
+    .on('zoom', (event) => {
+      g.attr('transform', event.transform);
+      // Show/hide entry labels based on zoom
+      const k = event.transform.k;
+      g.selectAll('.entry-label').style('display', k > 1.8 ? 'block' : 'none');
+      g.selectAll('.entry-node').attr('r', d => Math.max(2, d.radius / Math.sqrt(k)));
+    });
+
+  svg.call(zoom);
+
+  // Links
+  const link = g.append('g').selectAll('line')
+    .data(links)
+    .join('line')
+    .attr('stroke', d => d.type === 'domain-link' ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.04)')
+    .attr('stroke-width', d => d.type === 'domain-link' ? 2.5 : 0.5);
+
+  // Nodes
+  const node = g.append('g').selectAll('circle')
+    .data(nodes)
+    .join('circle')
+    .attr('r', d => d.radius)
+    .attr('fill', d => d.color)
+    .attr('opacity', d => d.type === 'domain' ? 0.9 : 0.5)
+    .attr('class', d => d.type === 'entry' ? 'entry-node' : 'domain-node')
+    .attr('cursor', d => d.type === 'domain' ? 'pointer' : 'default')
+    .on('click', (event, d) => {
+      if (d.type === 'domain') {
+        // Highlight entries of this domain
+        node.attr('opacity', n => {
+          if (n.type === 'domain') return 0.9;
+          return n.domain === d.id ? 0.95 : 0.08;
+        });
+        link.attr('opacity', l => {
+          if (l.type === 'domain-link') return 0.5;
+          const src = typeof l.source === 'object' ? l.source.id : l.source;
+          return src === d.id ? 0.6 : 0.03;
+        });
+        // Double click to reset
+        setTimeout(() => {
+          const reset = () => {
+            node.attr('opacity', n => n.type === 'domain' ? 0.9 : 0.5);
+            link.attr('opacity', l => l.type === 'domain-link' ? 1 : 0.2);
+          };
+          d3.select(event.target).on('dblclick', reset);
+        }, 10);
+      }
+    });
+
+  // Domain labels
+  const domainLabel = g.append('g').selectAll('text')
+    .data(nodes.filter(n => n.type === 'domain'))
+    .join('text')
+    .text(d => d.id)
+    .attr('fill', '#fff')
+    .attr('font-size', '10px')
+    .attr('font-weight', '700')
+    .attr('text-anchor', 'middle')
+    .attr('dy', -36)
+    .style('pointer-events', 'none');
+
+  // Entry labels (hidden by default)
+  const entryLabel = g.append('g').selectAll('text')
+    .data(nodes.filter(n => n.type === 'entry'))
+    .join('text')
+    .text(d => d.label)
+    .attr('fill', d => d.color)
+    .attr('font-size', '7px')
+    .attr('text-anchor', 'middle')
+    .attr('dy', -8)
+    .attr('class', 'entry-label')
+    .style('display', 'none')
+    .style('pointer-events', 'none');
+
+  // Force simulation
+  graphSim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id)
+      .distance(d => d.type === 'domain-link' ? 200 : 60)
+      .strength(d => d.type === 'domain-link' ? 0.3 : 0.15))
+    .force('charge', d3.forceManyBody()
+      .strength(d => d.type === 'domain' ? -600 : -8))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collision', d3.forceCollide().radius(d => d.radius + 2))
+    .alpha(0.8)
+    .alphaDecay(0.015)
+    .on('tick', () => {
+      link
+        .attr('x1', d => d.source.x)
+        .attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x)
+        .attr('y2', d => d.target.y);
+      node
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y);
+      domainLabel
+        .attr('x', d => d.x)
+        .attr('y', d => d.y);
+      entryLabel
+        .attr('x', d => d.x)
+        .attr('y', d => d.y);
+    });
+
+  // Drag
+  node.call(d3.drag()
+    .on('start', (event, d) => {
+      if (!event.active) graphSim.alphaTarget(0.3).restart();
+      d.fx = d.x; d.fy = d.y;
+    })
+    .on('drag', (event, d) => {
+      d.fx = event.x; d.fy = event.y;
+    })
+    .on('end', (event, d) => {
+      if (!event.active) graphSim.alphaTarget(0);
+      d.fx = null; d.fy = null;
+    }));
+
+  // Initial zoom out
+  svg.call(zoom.transform, d3.zoomIdentity.translate(width/2, height/2).scale(0.45).translate(-width/2, -height/2));
+
+  graphSvg = svg;
+}
+
+
+// ==================== FEATURE 4: RANKING VIEW ====================
+let rankingDomainFilter = '';
+
+function renderRanking() {
+  const el = document.getElementById('rankingView');
+
+  let filtered = activeCategory
+    ? ALL_SCORED.filter(s => s.cat === activeCategory)
+    : (rankingDomainFilter ? ALL_SCORED.filter(s => s.cat === rankingDomainFilter) : ALL_SCORED);
+
+  // Histogram
+  const buckets = [
+    { label: '90-100', min: 90, max: 100, color: '#667eea' },
+    { label: '75-89', min: 75, max: 89, color: '#764ba2' },
+    { label: '55-74', min: 55, max: 74, color: '#e67e22' },
+    { label: '35-54', min: 35, max: 54, color: '#f39c12' },
+    { label: '15-34', min: 15, max: 34, color: '#e74c3c' },
+    { label: '1-14', min: 1, max: 14, color: '#555' },
+  ];
+  const bCounts = buckets.map(b => ({
+    ...b,
+    count: filtered.filter(s => s.score >= b.min && s.score <= b.max).length
+  }));
+  const maxBCount = Math.max(...bCounts.map(b => b.count), 1);
+
+  let histHtml = `<div class="ranking-histogram">
+    <h3>Score Distribution (${filtered.length} entries)</h3>
+    <div class="histogram-bars">
+      ${bCounts.map(b => `<div class="histogram-bar" style="height:${Math.max(4, b.count/maxBCount*100)}%;background:${b.color};">
+        <span class="hist-label">${b.label}<br>${b.count}</span>
+      </div>`).join('')}
+    </div>
+    <div style="height:22px;"></div>
+  </div>`;
+
+  // Filter
+  let filterHtml = `<div class="ranking-filter">
+    <label>Filter by domain:</label>
+    <select id="rankingDomainSelect">
+      <option value="">All domains</option>
+      ${Object.entries(DATA).map(([name, {color}]) => `<option value="${name}" ${rankingDomainFilter===name?'selected':''}>${name} (${DATA[name].items.length})</option>`).join('')}
+    </select>
+  </div>`;
+
+  // List (limit to 200 for perf)
+  const shown = filtered.slice(0, 200);
+  let listHtml = shown.map((s, i) => {
+    const pct = s.score;
+    return `<div class="ranking-list-item">
+      <span class="ranking-pos">#${i + 1}</span>
+      <div class="ranking-bar-wrap">
+        <div class="ranking-bar-fill" style="width:${pct}%;background:${s.color}88;">
+          <span class="ranking-bar-name">${s.item}</span>
+        </div>
+      </div>
+      <span class="ranking-domain-badge" style="background:${s.color}22;color:${s.color}">${s.cat.split(' ')[0]}</span>
+      <span class="ranking-score-val">${s.score}</span>
+    </div>`;
+  }).join('');
+
+  if (filtered.length > 200) {
+    listHtml += `<div style="text-align:center;color:#555;padding:16px;font-size:0.85rem;">Showing top 200 of ${filtered.length} entries. Filter by domain to see more.</div>`;
+  }
+
+  el.innerHTML = histHtml + filterHtml + listHtml;
+
+  // Bind filter
+  document.getElementById('rankingDomainSelect').addEventListener('change', e => {
+    rankingDomainFilter = e.target.value;
+    renderRanking();
+  });
+}
+
+
+// ==================== VIEW SWITCHING ====================
+const viewEls = {
+  cloud: document.getElementById('cloudView'),
+  treemap: document.getElementById('treemapView'),
+  graph: document.getElementById('graphView'),
+  ranking: document.getElementById('rankingView'),
+  list: document.getElementById('listView'),
+};
+
+document.querySelectorAll('.view-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentView = btn.dataset.view;
+
+    Object.entries(viewEls).forEach(([key, el]) => {
+      if (key === 'cloud') {
+        el.style.display = currentView === 'cloud' ? 'flex' : 'none';
+      } else if (key === 'treemap') {
+        el.className = currentView === 'treemap' ? 'treemap-view active' : 'treemap-view';
+      } else if (key === 'graph') {
+        el.className = currentView === 'graph' ? 'graph-view active' : 'graph-view';
+      } else if (key === 'ranking') {
+        el.className = currentView === 'ranking' ? 'ranking-view active' : 'ranking-view';
+      } else if (key === 'list') {
+        el.className = currentView === 'list' ? 'list-view active' : 'list-view';
+      }
+    });
+    render();
+  });
+});
+
+// Filter search with debounce
+let searchTimeout;
+document.getElementById('searchInput').addEventListener('input', e => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    searchTerm = e.target.value;
+    render();
+  }, 80);
+});
+
+
+// ==================== FEATURE 3: COVERAGE GAUGE ANIMATION ====================
+function animateCoverage() {
+  const totalEntries = getAllItems().length;
+  const estimated = 1800;
+  const pct = Math.min(99, Math.round(totalEntries / estimated * 100));
+  const circle = document.getElementById('coverageArc');
+  const circumference = 2 * Math.PI * 48; // ~301.59
+  const targetOffset = circumference - (circumference * pct / 100);
+  const pctEl = document.getElementById('gaugePct');
+
+  let current = 0;
+  const duration = 1500;
+  const startTime = performance.now();
+
+  function tick(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    // Ease out cubic
+    const eased = 1 - Math.pow(1 - progress, 3);
+    current = Math.round(eased * pct);
+    pctEl.textContent = current + '%';
+    const offset = circumference - (circumference * current / 100);
+    circle.setAttribute('stroke-dashoffset', offset);
+    if (progress < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+
+// ==================== INIT ====================
+render();
+animateCoverage();
+</script>
+</body>
+</html>
